@@ -21,6 +21,7 @@ const roombaAccessory = function (log, config) {
     this.accessoryInfo = new Service.AccessoryInformation();
     this.switchService = new Service.Switch(this.name);
     this.batteryService = new Service.BatteryService(this.name);
+    this.filterMaintenance = new Service.FilterMaintenance(this.name);
 
     this.cache = new nodeCache({stdTTL: this.cacheTTL, checkPeriod: 5, useClones: false});
 
@@ -166,6 +167,18 @@ roombaAccessory.prototype = {
         });
     },
 
+    getBinStatus(callback) {
+        this.log("Bin status requested");
+
+        this.getStatus((error, status) => {
+            if (error) {
+                callback(error);
+            } else {
+                callback(null, status.binFull);
+            }
+        });
+    },
+
     identify(callback) {
         this.log("Identify requested. Not supported yet.");
 
@@ -210,7 +223,7 @@ roombaAccessory.prototype = {
                 roomba.end();
 
                 status.batteryLevel = response.batPct;
-                status.binFull = response.bin.full;
+                status.binFull = response.bin.full ? Characteristic.FilterChangeIndication.CHANGE_FILTER : Characteristic.FilterChangeIndication.FILTER_OK;
 
                 if (status.batteryLevel <= 20) {
                     status.batteryStatus = Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW;
@@ -275,6 +288,8 @@ roombaAccessory.prototype = {
         this.batteryService.getCharacteristic(Characteristic.StatusLowBattery)
             .on("get", this.getLowBatteryStatus.bind(this));
 
+        this.filterMaintenance.getCharacteristic(Characteristic.FilterChangeIndication)
+            .on("get", this.getBinStatus().bind(this));
 
         return [this.accessoryInfo, this.switchService, this.batteryService];
     },
@@ -290,6 +305,7 @@ roombaAccessory.prototype = {
                         this.batteryService.getCharacteristic(Characteristic.ChargingState).updateValue(status.charging);
                         this.batteryService.getCharacteristic(Characteristic.BatteryLevel).updateValue(status.batteryLevel);
                         this.batteryService.getCharacteristic(Characteristic.StatusLowBattery).updateValue(status.batteryStatus);
+                        this.filterMaintenance.getCharacteristic(Characteristic.FilterChangeIndication).updateValue(status.binFull);
                     }
                 }.bind(this), true);
 
